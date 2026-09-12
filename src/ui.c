@@ -827,7 +827,7 @@ static void DrawVirusBody(Rectangle area, const Virus *v) {
     y += 26;
 
     Rectangle deadBar = { area.x, y, area.width, 20 };
-    DrawProgressBar(deadBar, v->globalDead * 100.0f, BLACK, LIGHTGRAY, "Deaths");
+    DrawProgressBar(deadBar, v->globalDead * 100.0f, BLACK, LIGHTGRAY, "Local Deaths");
     y += 30;
 
     char buf[64];
