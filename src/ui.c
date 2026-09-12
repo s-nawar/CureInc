@@ -9,6 +9,9 @@ static int  gPausedSpeedBackup = 1;
 static bool gShowHowToPlay = false;
 typedef enum { INFO_TAB_LAB = 0, INFO_TAB_VIRUS, INFO_TAB_RESEARCH } InfoTab;
 static InfoTab gActiveInfoTab = INFO_TAB_LAB;
+#define FADE_DURATION 0.35f
+static GameScreen gLastScreen = SCREEN_MENU;
+static float      gFadeAlpha  = 0.0f;
 
 void InitUI(void) {
     // Reserved for future UI resources (fonts, sounds)
@@ -446,19 +449,39 @@ void UI_DrawEventLog(const GameState *gs) {
     }
 }
 
-void UI_DrawGameplay(GameState *gs, Rectangle regionNode) {
-    DrawText("[ Interactive World Map Placeholder ]", 350, 200, 20, LIGHTGRAY);
+static Color InfectionColor(float infectedFraction) {
+    if (infectedFraction < 0.15f) return DARKGREEN;
+    if (infectedFraction < 0.40f) return ORANGE;
+    return MAROON;
+}
+
+void UI_DrawGameplay(GameState *gs) {
+    DrawText("World Map", 310, 145, 20, DARKGRAY);
 
     Region *sel = &gs->regions[gs->selectedRegionIndex];
-    bool hovered = CheckCollisionPointRec(GetMousePosition(), regionNode);
 
-    DrawRectangleRec(regionNode, hovered ? SKYBLUE : BLUE);
-    DrawRectangleLinesEx(regionNode, 2, DARKBLUE);
-    DrawText(sel->name, (int)regionNode.x + 10, (int)regionNode.y + 10, 18, WHITE);
+    const int   MAP_COLS = 4;
+    const float cellW = 170.0f, cellH = 110.0f, gap = 15.0f;
+    const float mapX = 310.0f, mapY = 175.0f;
 
-    if (gs->screen == SCREEN_GAME) {
-        if (hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) gRegionPanelOpen = true;
-        if (IsKeyPressed(KEY_TAB)) gs->selectedRegionIndex = (gs->selectedRegionIndex + 1) % MAX_REGIONS;
+    for (int i = 0; i < MAX_REGIONS; i++) {
+        int col = i % MAP_COLS;
+        int row = i / MAP_COLS;
+        Rectangle cell = { mapX + col * (cellW + gap), mapY + row * (cellH + gap), cellW, cellH };
+
+        Color baseColor  = InfectionColor(gs->regions[i].infected);
+        Color hoverColor = Fade(baseColor, 0.6f);
+
+        bool clicked = DrawUIButton(cell, gs->regions[i].name, baseColor, hoverColor);
+
+        if (i == gs->selectedRegionIndex) {
+            DrawRectangleLinesEx(cell, 3.0f, WHITE);
+        }
+
+        if (gs->screen == SCREEN_GAME && clicked) {
+            gs->selectedRegionIndex = i;
+            gRegionPanelOpen = true;
+        }
     }
 
     UI_DrawEventLog(gs);
@@ -728,6 +751,19 @@ UIAction UI_DrawEndScreen(const GameState *gs)
 
 
     return UI_NONE;
+}
+
+void UI_DrawTransition(GameScreen currentScreen) {
+    if (currentScreen != gLastScreen) {
+        gFadeAlpha  = 1.0f;
+        gLastScreen = currentScreen;
+    }
+
+    if (gFadeAlpha > 0.0f) {
+        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(BLACK, gFadeAlpha));
+        gFadeAlpha -= GetFrameTime() / FADE_DURATION;
+        if (gFadeAlpha < 0.0f) gFadeAlpha = 0.0f;
+    }
 }
 
 static UIAction DrawLabBody(Rectangle area, const CureState *c) {

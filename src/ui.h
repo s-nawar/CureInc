@@ -55,15 +55,16 @@ bool DrawUIButton(Rectangle bounds, const char *text, Color baseColor, Color hov
 void DrawUIPanel(Rectangle bounds, Color background, Color border, float borderWidth);
 void DrawProgressBar(Rectangle bounds, float percentage, Color barColor, Color bgColor, const char *label);
 
-// Screen-level widgets (Day 1)
+// Screen-level widgets 
 UIAction UI_DrawMainMenu(GameScreen currentState);
 UIAction UI_DrawGameplayHUD(const GameStats *stats);
 UIAction UI_DrawPauseOverlay(void);
 void     UI_DrawRegionPanel(Rectangle bounds, RegionData *region, GameStats *stats, CureState *cure);
 
-// Full-screen coordinators (Day 2)
+// Full-screen coordinators 
 void     UI_DrawEventLog(const GameState *gs);
-void     UI_DrawGameplay(GameState *gs, Rectangle regionNode);
+void     UI_DrawGameplay(GameState *gs);
+void     UI_DrawTransition(GameScreen currentScreen);
 UIAction UI_DrawEndScreen(const GameState *gs);
 UIAction UI_DrawPauseOverlay(void);
 UIAction UI_DrawInfoPanel(GameState *gs);

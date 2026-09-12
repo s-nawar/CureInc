@@ -83,8 +83,6 @@ int main(void)
     state.screen              = SCREEN_MENU;
     state.selectedRegionIndex = 2;
 
-    Rectangle regionNode = { 400, 300, 200, 40 };
-
     while (!WindowShouldClose() && !exitRequested)
     {
         float frameTime = GetFrameTime();
@@ -127,7 +125,7 @@ int main(void)
                 }
                 case SCREEN_GAME:
                 case SCREEN_PAUSED:
-                    UI_DrawGameplay(&state, regionNode);
+                    UI_DrawGameplay(&state);
                     break;
                 case SCREEN_WIN:
                 case SCREEN_LOSE: 
@@ -140,6 +138,7 @@ int main(void)
                 }
                 default: break;
             }
+            UI_DrawTransition(state.screen);
         EndDrawing();
     }
 
