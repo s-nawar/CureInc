@@ -4,6 +4,7 @@
 #include "cure.h"
 #include <string.h>
 
+static bool gButtonsEnabled = true;
 static bool gRegionPanelOpen   = false;
 static int  gPausedSpeedBackup = 1;
 static bool gShowHowToPlay = false;
@@ -20,6 +21,8 @@ void InitUI(void) {
 void UI_ResetGameplayState(void) {
     gRegionPanelOpen   = false;
     gPausedSpeedBackup = 1;
+    gActiveInfoTab = INFO_TAB_LAB;
+    gButtonsEnabled = true;
 }
 
 void DrawUIPanel(Rectangle bounds, Color background, Color border, float borderWidth) {
@@ -27,15 +30,23 @@ void DrawUIPanel(Rectangle bounds, Color background, Color border, float borderW
     DrawRectangleLinesEx(bounds, borderWidth, border);
 }
 
+/* Shrink long labels to stay inside their existing controls. */
+static int TextSizeToFit(const char *text, int preferred, float width)
+{
+    while (preferred > 10 && MeasureText(text, preferred) > width)
+        preferred--;
+    return preferred;
+}
+
 bool DrawUIButton(Rectangle bounds, const char *text, Color baseColor, Color hoverColor) {
     Vector2 mousePos = GetMousePosition();
-    bool isHovered = CheckCollisionPointRec(mousePos, bounds);
+    bool isHovered = gButtonsEnabled && CheckCollisionPointRec(mousePos, bounds);
     Color activeColor = isHovered ? hoverColor : baseColor;
 
     DrawRectangleRec(bounds, activeColor);
     DrawRectangleLinesEx(bounds, 2.0f, DARKGRAY);
 
-    int fontSize = 18;
+    int fontSize = TextSizeToFit(text, 18, bounds.width - 20.0f);
     int textWidth = MeasureText(text, fontSize);
     float textX = bounds.x + (bounds.width - textWidth) / 2.0f;
     float textY = bounds.y + (bounds.height - fontSize) / 2.0f;
@@ -134,7 +145,7 @@ UIAction UI_DrawMainMenu(GameScreen currentState)
 
 
         DrawText(
-            "- Hire scientists to increase research speed.",
+            "- Start by hiring scientists or funding local research.",
             (int)panel.x + 40,
             (int)panel.y + 155,
             18,
@@ -142,7 +153,7 @@ UIAction UI_DrawMainMenu(GameScreen currentState)
         );
 
         DrawText(
-            "- Upgrade your laboratory and vaccine production.",
+            "- Then upgrade your lab to finish Discovery and Trials.",
             (int)panel.x + 40,
             (int)panel.y + 185,
             18,
@@ -150,7 +161,7 @@ UIAction UI_DrawMainMenu(GameScreen currentState)
         );
 
         DrawText(
-            "- Monitor infections, deaths and healthcare capacity.",
+            "- After Trials, vaccines are produced and sent automatically.",
             (int)panel.x + 40,
             (int)panel.y + 215,
             18,
@@ -158,7 +169,7 @@ UIAction UI_DrawMainMenu(GameScreen currentState)
         );
 
         DrawText(
-            "- React to mutations and random world events.",
+            "- Upgrade production; pause any time to read and plan.",
             (int)panel.x + 40,
             (int)panel.y + 245,
             18,
@@ -166,7 +177,7 @@ UIAction UI_DrawMainMenu(GameScreen currentState)
         );
 
         DrawText(
-            "- Reach 90% vaccination and reduce infection below 5%.",
+            "- Protect 90% of survivors; keep their infections below 5%.",
             (int)panel.x + 40,
             (int)panel.y + 275,
             18,
@@ -365,11 +376,12 @@ UIAction UI_DrawPauseOverlay(void) {
     return action;
 }
 
-void UI_DrawRegionPanel(Rectangle bounds, RegionData *region, GameStats *stats, CureState *cure) {
+void UI_DrawRegionPanel(Rectangle bounds, RegionData *region, const Region *source, CureState *cure) {
     if (!region->isSelected) return;
 
     DrawUIPanel(bounds, RAYWHITE, DARKGRAY, 2.0f);
-    DrawText(region->name, (int)bounds.x + 15, (int)bounds.y + 15, 22, DARKBLUE);
+    DrawText(region->name, (int)bounds.x + 15, (int)bounds.y + 15,
+             TextSizeToFit(region->name, 22, bounds.width - 65), DARKBLUE);
 
     Rectangle closeBtn = { bounds.x + bounds.width - 35, bounds.y + 10, 25, 25 };
     if (DrawUIButton(closeBtn, "X", RED, MAROON)) {
@@ -400,17 +412,42 @@ void UI_DrawRegionPanel(Rectangle bounds, RegionData *region, GameStats *stats, 
     Color statusColor = region->bordersClosed ? RED : DARKGREEN;
     DrawText(borderStatus, (int)bounds.x + 15, (int)bounds.y + 190, 16, statusColor);
 
-    Rectangle fundBtn = { bounds.x + 15, bounds.y + 230, bounds.width - 30, 35 };
+    float load = virus_hospital_load(source);
+    Color loadColor = load > 1.0f ? MAROON : DARKGREEN;
+    char hospitalText[80];
+    snprintf(hospitalText, sizeof(hospitalText), "Hospital load: %.0f%%", load * 100.0f);
+    DrawText(hospitalText, (int)bounds.x + 15, (int)bounds.y + 222, 17, loadColor);
+    Rectangle loadTrack = {bounds.x + 15, bounds.y + 246, bounds.width - 30, 12};
+    DrawRectangleRec(loadTrack, LIGHTGRAY);
+    float fill = load > 1.0f ? 1.0f : load;
+    if (fill < 0.0f) fill = 0.0f;
+    loadTrack.width *= fill;
+    DrawRectangleRec(loadTrack, loadColor);
+    if (source->overloadedDays >= 30)
+        snprintf(hospitalText, sizeof(hospitalText), "COLLAPSED: %d overloaded days", source->overloadedDays);
+    else if (load > 1.0f)
+        snprintf(hospitalText, sizeof(hospitalText), "Overloaded: %d / 30 days", source->overloadedDays);
+    else
+        snprintf(hospitalText, sizeof(hospitalText), "Within hospital capacity");
+    DrawText(hospitalText, (int)bounds.x + 15, (int)bounds.y + 270,
+             TextSizeToFit(hospitalText, 14, bounds.width - 30), loadColor);
+
+    Rectangle fundBtn = { bounds.x + 15, bounds.y + 300, bounds.width - 30, 35 };
     if (DrawUIButton(fundBtn, "Fund Local Research ($100)", DARKGREEN, GREEN)) {
-        if (cure->funding >= 100) {
+        if (cure->funding >= 100 && region->cureResearch < 100.0f) {
             cure->funding -= 100;
             region->cureResearch += 15.0f;
             if (region->cureResearch > 100.0f) region->cureResearch = 100.0f;
         }
     }
 
+    DrawText(region->cureResearch >= 100.0f ? "Local research is full." : "Adds up to 15 local research points.",
+             (int)bounds.x + 15, (int)bounds.y + 341, 12, DARKGRAY);
+    DrawText("Faster research + stronger hospitals.",
+             (int)bounds.x + 15, (int)bounds.y + 358, 12, DARKGRAY);
+
     const char *toggleLabel = region->bordersClosed ? "Reopen Borders" : "Close Borders ($100)";
-    Rectangle borderBtn = { bounds.x + 15, bounds.y + 275, bounds.width - 30, 35 };
+    Rectangle borderBtn = { bounds.x + 15, bounds.y + 385, bounds.width - 30, 35 };
     if (DrawUIButton(borderBtn, toggleLabel, MAROON, RED)) {
         if (!region->bordersClosed && cure->funding >= 100) {
             cure->funding -= 100;
@@ -419,6 +456,9 @@ void UI_DrawRegionPanel(Rectangle bounds, RegionData *region, GameStats *stats, 
             region->bordersClosed = false;
         }
     }
+    DrawText("Closing slows spread. Reopening is free.",
+             (int)bounds.x + 15, (int)bounds.y + 429,
+             TextSizeToFit("Closing slows spread. Reopening is free.", 12, bounds.width - 30), DARKGRAY);
 }
 
 //full-screen coordinators//
@@ -455,10 +495,40 @@ static Color InfectionColor(float infectedFraction) {
     return MAROON;
 }
 
+/* One short instruction stays visible whichever information tab is open. */
+static void DrawObjective(const GameState *gs) {
+    Rectangle bounds = {310, 80, 725, 58};
+    const char *next;
+    char detail[128];
+    const CureState *c = &gs->cure;
+
+    if (c->phase == PHASE_DISCOVERY || c->phase == PHASE_TRIALS) {
+        next = "Next: hire scientists or fund a region's research.";
+        snprintf(detail, sizeof(detail), "%s: %.0f%% complete. Finish both research phases to unlock vaccines.",
+                 c->phase == PHASE_DISCOVERY ? "Discovery" : "Trials", cure_phase_progress(c));
+    } else if (c->phase == PHASE_PRODUCTION) {
+        next = "Next: upgrade production to build vaccine stock.";
+        snprintf(detail, sizeof(detail), "Stockpile goal: %.0f%%. Distribution starts automatically at 100%%.",
+                 cure_phase_progress(c));
+    } else {
+        next = c->globalDistributed >= 0.90f
+            ? "Next: keep vaccination running while infections fall."
+            : "Next: increase production to vaccinate more people.";
+        float living = 1.0f - gs->virus.globalDead;
+        float infected = living > 0.0f ? gs->virus.globalInfected / living * 100.0f : 0.0f;
+        snprintf(detail, sizeof(detail), "Survivors: %.1f%% vaccinated (goal 90%%); %.1f%% infected (goal below 5%%).",
+                 c->globalDistributed * 100.0f, infected);
+    }
+    DrawUIPanel(bounds, RAYWHITE, DARKBLUE, 1.0f);
+    DrawText(next, 320, 88, TextSizeToFit(next, 17, bounds.width - 20), DARKBLUE);
+    DrawText(detail, 320, 112, TextSizeToFit(detail, 14, bounds.width - 20), DARKGRAY);
+}
+
 void UI_DrawGameplay(GameState *gs) {
+    gButtonsEnabled = (gs->screen == SCREEN_GAME);
+    DrawObjective(gs);
     DrawText("World Map", 310, 145, 20, DARKGRAY);
 
-    Region *sel = &gs->regions[gs->selectedRegionIndex];
 
     const int   MAP_COLS = 4;
     const float cellW = 170.0f, cellH = 110.0f, gap = 15.0f;
@@ -503,11 +573,11 @@ void UI_DrawGameplay(GameState *gs) {
     /* Calculate overall cure progress across all phases (0-100%) */
     float overallProgress = 0.0f;
     if (gs->cure.phase == PHASE_DISCOVERY) {
-        overallProgress = gs->cure.researchProgress * 0.25f; /* 0-25% */
+        overallProgress = cure_phase_progress(&gs->cure) * 0.25f; /* 0-25% */
     } else if (gs->cure.phase == PHASE_TRIALS) {
-        overallProgress = 25.0f + (gs->cure.researchProgress * 0.25f); /* 25-50% */
+        overallProgress = 25.0f + (cure_phase_progress(&gs->cure) * 0.25f); /* 25-50% */
     } else if (gs->cure.phase == PHASE_PRODUCTION) {
-        overallProgress = 50.0f + (gs->cure.researchProgress * 0.25f); /* 50-75% */
+        overallProgress = 50.0f + (cure_phase_progress(&gs->cure) * 0.25f); /* 50-75% */
     } else if (gs->cure.phase == PHASE_DISTRIBUTION) {
         overallProgress = 75.0f + (gs->cure.globalDistributed * 25.0f); /* 75-100% */
     }
@@ -518,7 +588,7 @@ void UI_DrawGameplay(GameState *gs) {
     stats.dayCount        = gs->day;
     stats.gameSpeed       = (gs->screen == SCREEN_PAUSED) ? 0 : gs->gameSpeed;
     stats.fundingRate     = gs->cure.fundingPerTick;
-    stats.researchRate    = gs->cure.rpPerTick;
+    stats.researchRate    = cure_research_rate(gs);
     stats.stability       = gs->cure.stability;
     stats.curePhase       = gs->cure.phase;
 
@@ -527,6 +597,7 @@ void UI_DrawGameplay(GameState *gs) {
     else if (hudAction == UI_SPEED_2) { gs->gameSpeed = 2; gPausedSpeedBackup = 2; }
     else if (hudAction == UI_PAUSE)   { gs->screen = SCREEN_PAUSED; }
 
+    Region *sel = &gs->regions[gs->selectedRegionIndex];
     RegionData rd = {0};
     rd.name          = sel->name;
     rd.population    = (int)(sel->population * 1000000.0f);
@@ -535,14 +606,15 @@ void UI_DrawGameplay(GameState *gs) {
     rd.bordersClosed = sel->bordersClosed;
     rd.isSelected    = gRegionPanelOpen;
 
-    Rectangle panel = { (float)SCREEN_WIDTH - 320, 70, 300, 350 };
+    Rectangle panel = { (float)SCREEN_WIDTH - 320, 80, 300, 455 };
     if (gs->screen == SCREEN_GAME)
-        UI_DrawRegionPanel(panel, &rd, &stats, &gs->cure);
+        UI_DrawRegionPanel(panel, &rd, sel, &gs->cure);
 
     gRegionPanelOpen   = rd.isSelected;
     sel->cureResearch  = rd.cureResearch;
     sel->bordersClosed = rd.bordersClosed;
 
+    gButtonsEnabled = true; /* Only the pause overlay may accept clicks now. */
     if (gs->screen == SCREEN_PAUSED) {
         UIAction pauseAction = UI_DrawPauseOverlay();
         if (pauseAction == UI_RESUME) {
@@ -766,48 +838,68 @@ void UI_DrawTransition(GameScreen currentScreen) {
     }
 }
 
-static UIAction DrawLabBody(Rectangle area, const CureState *c) {
+/* Preview a purchase on a copy, so the labels use the real game formulas. */
+static UIAction DrawLabBody(Rectangle area, const GameState *gs) {
+    const CureState *c = &gs->cure;
     UIAction action = UI_NONE;
     float y = area.y;
+    char buf[96];
 
-    /* Display current stats */
-    char buf[64];
     snprintf(buf, sizeof(buf), "Scientists: %d", c->scientistCount);
     DrawText(buf, (int)area.x, (int)y, 14, DARKGRAY);
-    y += 18;
-
     snprintf(buf, sizeof(buf), "Lab Level: %d/3", c->labLevel);
-    DrawText(buf, (int)area.x, (int)y, 14, DARKGRAY);
-    y += 18;
-
+    DrawText(buf, (int)area.x, (int)y + 18, 14, DARKGRAY);
     snprintf(buf, sizeof(buf), "Production Level: %d/3", c->productionLevel);
-    DrawText(buf, (int)area.x, (int)y, 14, DARKGRAY);
-    y += 18;
-
+    DrawText(buf, (int)area.x, (int)y + 36, 14, DARKGRAY);
     snprintf(buf, sizeof(buf), "Vaccine Stock: %.1f", c->vaccineStockpile);
-    DrawText(buf, (int)area.x, (int)y, 14, DARKGRAY);
-    y += 26;
+    DrawText(buf, (int)area.x, (int)y + 54, 14, DARKGRAY);
+    y += 80;
 
-    /* Buttons with costs */
-    Rectangle hireBtn    = { area.x, y,      area.width, 32 };
-    Rectangle upgradeBtn = { area.x, y + 40, area.width, 32 };
-    Rectangle prodBtn    = { area.x, y + 80, area.width, 32 };
+    Rectangle hireBtn = { area.x, y, area.width, 32 };
+    Rectangle labBtn  = { area.x, y + 66, area.width, 32 };
+    Rectangle prodBtn = { area.x, y + 132, area.width, 32 };
+    float currentRate = cure_research_rate(gs);
+    GameState preview = *gs;
+    preview.cure.scientistCount++;
 
-    if (DrawUIButton(hireBtn, "Hire Scientist ($100)", DARKBLUE, SKYBLUE))       
+    if (DrawUIButton(hireBtn, "Hire Scientist ($100)", DARKBLUE, SKYBLUE))
         action = UI_HIRE_SCIENTIST;
-    
-    const char *labBtnText = (c->labLevel >= 3) ? "Lab Maxed" : 
-        (c->labLevel == 2) ? "Upgrade Lab ($450)" :
-        (c->labLevel == 1) ? "Upgrade Lab ($300)" : "Upgrade Lab ($150)";
-    if (DrawUIButton(upgradeBtn, labBtnText, DARKBLUE, SKYBLUE))       
-        action = UI_UPGRADE_LAB;
-    
-    const char *prodBtnText = (c->productionLevel >= 3) ? "Production Maxed" :
-        (c->productionLevel == 2) ? "Upgrade Production ($600)" :
-        (c->productionLevel == 1) ? "Upgrade Production ($400)" : "Upgrade Production ($200)";
-    if (DrawUIButton(prodBtn, prodBtnText, DARKBLUE, SKYBLUE)) 
-        action = UI_INCREASE_PRODUCTION;
+    snprintf(buf, sizeof(buf), "+%.2f research/day now",
+             cure_research_rate(&preview) - currentRate);
+    DrawText(buf, (int)area.x, (int)y + 35, 13, DARKGRAY);
+    snprintf(buf, sizeof(buf), "+%.1f vaccine units/day",
+             cure_production_rate(&preview.cure) - cure_production_rate(c));
+    DrawText(buf, (int)area.x, (int)y + 50, 13, DARKGRAY);
 
+    if (c->labLevel >= 3) snprintf(buf, sizeof(buf), "Lab Maxed");
+    else snprintf(buf, sizeof(buf), "Upgrade Lab ($%d)", 150 * (c->labLevel + 1));
+    if (DrawUIButton(labBtn, buf, DARKBLUE, SKYBLUE))
+        action = UI_UPGRADE_LAB;
+    preview.cure = *c;
+    if (c->labLevel < 3) preview.cure.labLevel++;
+    snprintf(buf, sizeof(buf), "+%.2f research/day now",
+             cure_research_rate(&preview) - currentRate);
+    if (c->phase >= PHASE_PRODUCTION)
+        snprintf(buf, sizeof(buf), "Research is already complete.");
+    else if (c->labLevel >= 3)
+        snprintf(buf, sizeof(buf), "Maximum lab level reached.");
+    DrawText(buf, (int)area.x, (int)y + 101,
+             TextSizeToFit(buf, 13, area.width), DARKGRAY);
+
+    if (c->productionLevel >= 3) snprintf(buf, sizeof(buf), "Production Maxed");
+    else snprintf(buf, sizeof(buf), "Upgrade Production ($%d)", 200 * (c->productionLevel + 1));
+    if (DrawUIButton(prodBtn, buf, DARKBLUE, SKYBLUE))
+        action = UI_INCREASE_PRODUCTION;
+    preview.cure = *c;
+    if (c->productionLevel < 3) preview.cure.productionLevel++;
+    snprintf(buf, sizeof(buf), "+%.1f vaccine units/day",
+             cure_production_rate(&preview.cure) - cure_production_rate(c));
+    if (c->productionLevel >= 3)
+        snprintf(buf, sizeof(buf), "Maximum production reached.");
+    DrawText(buf, (int)area.x, (int)y + 167,
+             TextSizeToFit(buf, 13, area.width), DARKGRAY);
+    DrawText("Vaccine output starts after Trials.", (int)area.x, (int)y + 193,
+             TextSizeToFit("Vaccine output starts after Trials.", 12, area.width), DARKGRAY);
     return action;
 }
 
@@ -840,17 +932,19 @@ static void DrawVirusBody(Rectangle area, const Virus *v) {
         TRAIT_FAST_SPREAD, TRAIT_COLD_ADAPTED, TRAIT_HOT_ADAPTED, TRAIT_LONG_INCUBATION
     };
 
-    char traitsBuf[160] = "Traits: ";
-    bool any = false;
+    DrawText("Active traits:", (int)area.x, (int)y, 14, DARKGRAY);
+    y += 20;
+    int shown = 0;
     for (int i = 0; i < 8; i++) {
-        if (virus_has_trait(v, allTraits[i])) {
-            if (any) strncat(traitsBuf, ", ", sizeof(traitsBuf) - strlen(traitsBuf) - 1);
-            strncat(traitsBuf, virus_trait_name(allTraits[i]), sizeof(traitsBuf) - strlen(traitsBuf) - 1);
-            any = true;
-        }
+        if (!virus_has_trait(v, allTraits[i])) continue;
+        const char *name = virus_trait_name(allTraits[i]);
+        float columnWidth = area.width / 2.0f;
+        DrawText(name, (int)(area.x + (shown % 2) * columnWidth),
+                 (int)(y + (shown / 2) * 19),
+                 TextSizeToFit(name, 12, columnWidth - 6), DARKGRAY);
+        shown++;
     }
-    if (!any) strncat(traitsBuf, "None yet", sizeof(traitsBuf) - strlen(traitsBuf) - 1);
-    DrawText(traitsBuf, (int)area.x, (int)y, 12, DARKGRAY);
+    if (shown == 0) DrawText("None yet", (int)area.x, (int)y, 12, DARKGRAY);
 }
 
 static void DrawResearchBody(Rectangle area, const CureState *c) {
@@ -863,11 +957,16 @@ static void DrawResearchBody(Rectangle area, const CureState *c) {
     y += 24;
 
     Rectangle progBar = { area.x, y, area.width, 20 };
-    DrawProgressBar(progBar, c->researchProgress, BLUE, LIGHTGRAY, "Phase Progress");
+    const char *progressLabel = c->phase == PHASE_PRODUCTION ? "Stockpile goal" :
+        c->phase == PHASE_DISTRIBUTION ? "Vaccinated" : "Phase Progress";
+    DrawProgressBar(progBar, cure_phase_progress(c), BLUE, LIGHTGRAY, progressLabel);
     y += 26;
 
     Rectangle distBar = { area.x, y, area.width, 20 };
-    DrawProgressBar(distBar, c->globalDistributed * 100.0f, DARKGREEN, LIGHTGRAY, "Distributed");
+    if (c->phase != PHASE_DISTRIBUTION)
+        DrawProgressBar(distBar, c->globalDistributed * 100.0f, DARKGREEN, LIGHTGRAY, "Vaccinated");
+    else
+        DrawText("Goal: 90% of living people", (int)area.x, (int)y, 14, DARKGREEN);
     y += 30;
 
     snprintf(buf, sizeof(buf), "Stability: %.0f%%", c->stability * 100.0f);
@@ -878,12 +977,15 @@ static void DrawResearchBody(Rectangle area, const CureState *c) {
     DrawText(buf, (int)area.x, (int)y, 14, DARKGRAY);
     y += 20;
 
-    snprintf(buf, sizeof(buf), "Production: %.1f/day", c->productionRate);
+    snprintf(buf, sizeof(buf), "Capacity: %.1f units/day", c->productionRate);
     DrawText(buf, (int)area.x, (int)y, 14, DARKGRAY);
+    y += 22;
+    DrawText("1 unit = doses for 1% of", (int)area.x, (int)y, 12, DARKGRAY);
+    DrawText("the original world population.", (int)area.x, (int)y + 16, 12, DARKGRAY);
 }
 
 UIAction UI_DrawInfoPanel(GameState *gs) {
-    Rectangle bounds = { 20, 80, 260, 300 };
+    Rectangle bounds = { 20, 80, 260, 345 };
     DrawUIPanel(bounds, RAYWHITE, DARKGRAY, 2.0f);
 
     float tabWidth = (bounds.width - 10) / 3.0f;
@@ -903,7 +1005,7 @@ UIAction UI_DrawInfoPanel(GameState *gs) {
 
     UIAction action = UI_NONE;
     switch (gActiveInfoTab) {
-        case INFO_TAB_LAB:      action = DrawLabBody(bodyArea, &gs->cure); break;
+        case INFO_TAB_LAB:      action = DrawLabBody(bodyArea, gs); break;
         case INFO_TAB_VIRUS:    DrawVirusBody(bodyArea, &gs->virus);       break;
         case INFO_TAB_RESEARCH: DrawResearchBody(bodyArea, &gs->cure);     break;
     }

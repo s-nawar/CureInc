@@ -28,7 +28,7 @@ static Event eventPool[POOL_SIZE] =
         "Budget cuts", "Political deadlock freezes a quarter of the research allocation--", 0, 0 
     },
     {
-        "Volunteer Surge", "Thousands sign up for lcinical trials following a news segment--", 0, 0 
+        "Volunteer Surge", "Volunteers add +0.05 base research points per day.", 0, 0 
     },
     {
         "Supply Disruption", "Cold-chain failure delays vaccine shipments to eastern zones--", 0, 0 
@@ -43,7 +43,7 @@ static Event eventPool[POOL_SIZE] =
         "Political Infighting", "Member nations prioritize hoarding; global solidarity dissolves--", 0, 0
     },
     {
-        "Medical Miracle", "AI-driven drug discovery accelerates trial timelines by 30%--", 0, 0 
+        "Medical Miracle", "Research gains 5 progress points and +0.10 base points/day.", 0, 0 
     },
     {
         "Winter is coming", "Hospitals are preparing for colder weather.", 0, 0 
@@ -108,8 +108,9 @@ void events_trigger_random(GameState *gs)
             if (gs->cure.fundingPerTick < 1.0f) gs->cure.fundingPerTick = 1.0f;
             break;
 
+        /* Small permanent bonuses: useful help, not a replacement for investment. */
         case 7: /* "Volunteer Surge" */
-            gs->cure.rpPerTick += 0.3f;
+            gs->cure.rpPerTick += 0.05f;
             break;
 
         case 8: /* Supply Disruption */
@@ -133,7 +134,7 @@ void events_trigger_random(GameState *gs)
 
         case 12: /* "Medical Miracle" */
             gs->cure.researchProgress += 5.0f;
-            gs->cure.rpPerTick += 0.5f;
+            gs->cure.rpPerTick += 0.10f;
             break;
 
         case 2:  /* Mutation Watch: informational only */

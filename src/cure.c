@@ -13,9 +13,9 @@ void cure_init(CureState *c)
     c->completionDay      = 0;
     
     c->funding            = 50.0f;     /* Start with minimal funding */
-    c->fundingPerTick     = 10.0f;    /* Income - 10 days for first scientist */
+    c->fundingPerTick     = 10.0f;    /* Income: first $100 scientist is affordable after 5 days */
     c->researchPoints     = 0.0f;
-    c->rpPerTick          = 0.5f;     /* Very slow base research - requires investment to progress */
+    c->rpPerTick          = 0.5f;     /* Base research; purchases provide the main speed boosts */
     
     /* Initialize gameplay systems */
     c->scientistCount     = 0;
@@ -24,120 +24,117 @@ void cure_init(CureState *c)
     c->vaccineStockpile   = 0.0f;
 }
 
-/*
- * cure_update - Advances the cure research pipeline through four phases.
- *               Research speed is affected by stability (virus mutations),
- *               virus resistance, scientist count, lab level, and regional research contributions.
- *               Production phase generates vaccine stockpile based on production level.
- *               Distribution phase deploys vaccines to reduce regional infections.
- */
+/* One vaccine unit supplies doses for 1% of the original world population. */
+#define VACCINE_UNIT_SHARE 0.01f
+#define INITIAL_STOCK_GOAL 10.0f
+
+float cure_production_rate(const CureState *c)
+{
+    return 1.0f + c->productionLevel * 0.5f + c->scientistCount * 0.2f;
+}
+
+/* Shared by the simulation and HUD: actual progress points per game day. */
+float cure_research_rate(const GameState *gs)
+{
+    const CureState *c = &gs->cure;
+    if (c->phase != PHASE_DISCOVERY && c->phase != PHASE_TRIALS)
+        return 0.0f;
+
+    /* Balance: a $100 regional grant adds 15 * .008 = .12 base RP/day.
+     * Scientists and lab levels add to their own multipliers, not compound. */
+    float regionalBoost = 0.0f;
+    for (int i = 0; i < MAX_REGIONS; i++)
+        regionalBoost += gs->regions[i].cureResearch * 0.008f;
+
+    return (c->rpPerTick + regionalBoost)
+        * (1.0f + c->scientistCount * 0.20f)
+        * (1.0f + c->labLevel * 0.25f)
+        * c->stability * (1.0f - gs->virus.resistance * 0.5f);
+}
+
+/* Production progresses through stock, not the unused research counter. */
+float cure_phase_progress(const CureState *c)
+{
+    float progress = c->researchProgress;
+    if (c->phase == PHASE_PRODUCTION)
+        progress = c->vaccineStockpile / INITIAL_STOCK_GOAL * 100.0f;
+    else if (c->phase == PHASE_DISTRIBUTION)
+        progress = c->globalDistributed * 100.0f;
+
+    if (progress < 0.0f) return 0.0f;
+    if (progress > 100.0f) return 100.0f;
+    return progress;
+}
+
 void cure_update(GameState *gs, float dtDays)
 {
     CureState *c = &gs->cure;
+    if (dtDays <= 0.0f) return;
+
     c->funding += c->fundingPerTick * dtDays;
     c->researchPoints += c->rpPerTick * dtDays;
+    c->productionRate = cure_production_rate(c);
 
-    /* Calculate scientist bonus: each scientist adds 10% to research speed */
-    float scientistMultiplier = 1.0f + (c->scientistCount * 0.10f);
-    
-    /* Calculate lab bonus: each level adds 15% to research speed */
-    float labMultiplier = 1.0f + (c->labLevel * 0.15f);
-
-    /* Virus resistance slows down cure research */
-    float resistanceFactor = 1.0f - gs->virus.resistance * 0.5f;
-
-    if (c->phase == PHASE_DISCOVERY || c->phase == PHASE_TRIALS)
-    {
-        /* Research phases: Discovery and Trials */
-        float regionalBoost = 0.0f;
-        for (int i = 0; i < MAX_REGIONS; i++) {
-            regionalBoost += gs->regions[i].cureResearch * 0.02f;
-        }
-        
-        /* Research progress: base rate + regional boost + scientist/lab bonuses, scaled by stability & resistance */
-        float totalResearchRate = (c->rpPerTick + regionalBoost) * scientistMultiplier * labMultiplier;
-        c->researchProgress += totalResearchRate * c->stability * resistanceFactor * dtDays;
-
+    if (c->phase == PHASE_DISCOVERY || c->phase == PHASE_TRIALS) {
+        c->researchProgress += cure_research_rate(gs) * dtDays;
         if (c->researchProgress >= 100.0f) {
             c->researchProgress = 0.0f;
             c->phase++;
-            if (c->phase == PHASE_DISTRIBUTION && c->completionDay == 0) {
-                c->completionDay = gs->day;
-            }
         }
+        return;
     }
-    else if (c->phase == PHASE_PRODUCTION)
-    {
-        /* Production phase: manufacture vaccine doses */
-        
-        /* Production rate based on facility level and scientist count */
-        /* Base: 1.0/day, +0.5/day per production level, +0.2/day per scientist */
-        c->productionRate = 1.0f + (c->productionLevel * 0.5f) + (c->scientistCount * 0.2f);
-        
-        /* Accumulate vaccine stockpile */
-        c->vaccineStockpile += c->productionRate * dtDays;
-        
-        /* Auto-advance to distribution when stockpile reaches threshold */
-        /* Need enough doses for initial distribution (10 units = ready for global rollout) */
-        if (c->vaccineStockpile >= 10.0f)
-        {
+
+    c->vaccineStockpile += c->productionRate * dtDays;
+    c->effectiveness = c->stability * (1.0f - gs->virus.resistance * 0.25f);
+    if (c->effectiveness < 0.0f) c->effectiveness = 0.0f;
+    if (c->effectiveness > 1.0f) c->effectiveness = 1.0f;
+
+    if (c->phase == PHASE_PRODUCTION) {
+        if (c->vaccineStockpile >= INITIAL_STOCK_GOAL) {
             c->phase = PHASE_DISTRIBUTION;
-            if (c->completionDay == 0) {
-                c->completionDay = gs->day;
-            }
-            c->effectiveness = c->stability * (1.0f - gs->virus.resistance * 0.25f); /* lock in final potency */
+            if (c->completionDay == 0) c->completionDay = gs->day;
         }
+        return;
     }
-    else if (c->phase == PHASE_DISTRIBUTION)
-    {
-        /* Distribution phase: deploy vaccines to reduce infection */
-        if (c->completionDay == 0) {
-            c->completionDay = gs->day;
-        }
-        c->effectiveness = c->stability * (1.0f - gs->virus.resistance * 0.25f);
-        
-        /* Continue producing vaccines */
-        c->productionRate = 1.0f + (c->productionLevel * 0.5f) + (c->scientistCount * 0.2f);
-        c->vaccineStockpile += c->productionRate * dtDays;
-        
-        /* Distribute vaccines globally */
-        float distributionRate = 0.015f * c->effectiveness * dtDays;
-        
-        /* Consume stockpile for distribution (1 dose = 1% distribution) */
-        float dosesNeeded = distributionRate * 100.0f;
-        if (c->vaccineStockpile >= dosesNeeded)
-        {
-            c->vaccineStockpile -= dosesNeeded;
-            c->globalDistributed += distributionRate;
-            
-            /* Apply vaccination to regions proportionally */
-            float totalPop = 0.0f;
-            for (int i = 0; i < MAX_REGIONS; i++) {
-                totalPop += gs->regions[i].population;
-            }
-            
-            for (int i = 0; i < MAX_REGIONS; i++) {
-                float regionShare = (totalPop > 0.0f) ? (gs->regions[i].population / totalPop) : 0.0f;
-                float regionVaccines = distributionRate * regionShare;
-                gs->regions[i].vaccinated += regionVaccines;
-                
-                /* Reduce infection as vaccination increases */
-                /* Each 1% vaccinated reduces infection by 0.5% directly */
-                float infectionReduction = regionVaccines * 0.5f * c->effectiveness;
-                gs->regions[i].infected -= infectionReduction;
-                if (gs->regions[i].infected < 0.0f) gs->regions[i].infected = 0.0f;
-                if (gs->regions[i].vaccinated > 1.0f) gs->regions[i].vaccinated = 1.0f;
-            }
-        }
-        
-        if (c->globalDistributed > 1.0f) c->globalDistributed = 1.0f; /* victory */
+
+    if (c->phase != PHASE_DISTRIBUTION || c->effectiveness <= 0.0f)
+        return;
+
+    float totalPop = 0.0f;
+    for (int i = 0; i < MAX_REGIONS; i++)
+        totalPop += gs->regions[i].population;
+    if (totalPop <= 0.0f || c->vaccineStockpile <= 0.0f) return;
+
+    /* Allocate the available stock proportionally by original population.
+     * Equal local fractions already give proportional numbers of doses.
+     * Unused allocations stay in stock for another day. */
+    float offeredFraction = c->vaccineStockpile * VACCINE_UNIT_SHARE;
+    float usedUnits = 0.0f;
+    for (int i = 0; i < MAX_REGIONS; i++) {
+        Region *r = &gs->regions[i];
+        float healthy = 1.0f - r->infected - r->dead - r->vaccinated;
+        if (healthy < 0.0f) healthy = 0.0f;
+
+        float vaccinatedToday = offeredFraction;
+        if (vaccinatedToday > healthy) vaccinatedToday = healthy;
+
+        /* Failed doses consume stock but leave their recipients susceptible.
+         * Vaccines protect healthy people; they do not directly cure cases. */
+        r->vaccinated += vaccinatedToday * c->effectiveness;
+        usedUnits += vaccinatedToday / VACCINE_UNIT_SHARE
+            * (r->population / totalPop);
     }
+    c->vaccineStockpile -= usedUnits;
+    if (c->vaccineStockpile < 0.0f) c->vaccineStockpile = 0.0f;
+
+    /* main.c calls virus_refresh_totals after this, once all regions are updated. */
 }
 
 /*
  * cure_hire_scientist - Hire a scientist to boost research speed.
  *                       Cost: 100 funding per scientist.
- *                       Effect: +10% research speed per scientist.
+ *                       Effect: +0.20 to the scientist research multiplier per hire.
+ *                       Also adds 0.2 vaccine units/day after research.
  */
 int cure_hire_scientist(CureState *c)
 {
@@ -147,6 +144,7 @@ int cure_hire_scientist(CureState *c)
     {
         c->funding -= SCIENTIST_COST;
         c->scientistCount++;
+        c->productionRate = cure_production_rate(c);
         return 1;
     }
     return 0;
@@ -155,7 +153,7 @@ int cure_hire_scientist(CureState *c)
 /*
  * cure_upgrade_lab - Upgrade research lab to boost research speed.
  *                    Cost: 150 * (level + 1) funding.
- *                    Effect: +15% research speed per level.
+ *                    Effect: +0.25 to the laboratory research multiplier per level.
  *                    Max level: 3
  */
 int cure_upgrade_lab(CureState *c)
@@ -179,7 +177,7 @@ int cure_upgrade_lab(CureState *c)
 /*
  * cure_upgrade_production - Upgrade vaccine production facility.
  *                           Cost: 200 * (level + 1) funding.
- *                           Effect: +0.5 doses/day per level.
+ *                           Effect: +0.5 vaccine units/day per level.
  *                           Max level: 3
  */
 int cure_upgrade_production(CureState *c)
@@ -195,6 +193,7 @@ int cure_upgrade_production(CureState *c)
     {
         c->funding -= cost;
         c->productionLevel++;
+        c->productionRate = cure_production_rate(c);
         return 1;
     }
     return 0;
