@@ -102,7 +102,7 @@ typedef struct {
                             */
   float stability;         /* 0-1, degrades when virus mutates           */
   float effectiveness;     /* 0-1,how well the vaccine halts the spread  */
-  float productionRate;    /* doses manufactured per game-day            */
+  float productionRate;    /* vaccine-unit capacity per game-day         */
   float globalDistributed; /* protected/vaccinated fraction of living population */
 
   float funding;           /* current  wallet balance of a specific region's panel;budget=funding       */
@@ -114,7 +114,7 @@ typedef struct {
   int   scientistCount;    /* number of hired scientists                 */
   int   labLevel;          /* research lab upgrade level (0-3)           */
   int   productionLevel;   /* production facility upgrade level (0-3)    */
-  float vaccineStockpile;  /* accumulated vaccine doses ready for distribution */
+  float vaccineStockpile;  /* vaccine units in stock; 1 unit supplies 1% of original world population */
 } CureState;
 
 /*
