@@ -19,50 +19,68 @@ void UI_ResetGameplayState(void) {
     gPausedSpeedBackup = 1;
 }
 
+/* Enhanced panel with shadow and gradient */
 void DrawUIPanel(Rectangle bounds, Color background, Color border, float borderWidth) {
-    DrawRectangleRec(bounds, background);
+    DrawRectangle((int)bounds.x + 4, (int)bounds.y + 4, (int)bounds.width, (int)bounds.height, Fade(BLACK, 0.3f));
+    DrawRectangleGradientV((int)bounds.x, (int)bounds.y, (int)bounds.width, (int)bounds.height, 
+                           background, Fade(background, 0.85f));
     DrawRectangleLinesEx(bounds, borderWidth, border);
 }
 
+/* Enhanced button with 3D effect and hover animation */
 bool DrawUIButton(Rectangle bounds, const char *text, Color baseColor, Color hoverColor) {
     Vector2 mousePos = GetMousePosition();
     bool isHovered = CheckCollisionPointRec(mousePos, bounds);
     Color activeColor = isHovered ? hoverColor : baseColor;
 
-    DrawRectangleRec(bounds, activeColor);
-    DrawRectangleLinesEx(bounds, 2.0f, DARKGRAY);
+    if (isHovered) {
+        DrawRectangle((int)bounds.x + 3, (int)bounds.y + 3, (int)bounds.width, (int)bounds.height, Fade(BLACK, 0.4f));
+    } else {
+        DrawRectangle((int)bounds.x + 2, (int)bounds.y + 2, (int)bounds.width, (int)bounds.height, Fade(BLACK, 0.3f));
+    }
+
+    DrawRectangleGradientV((int)bounds.x, (int)bounds.y, (int)bounds.width, (int)bounds.height, 
+                           activeColor, Fade(activeColor, 0.7f));
+    DrawRectangleLinesEx(bounds, isHovered ? 3.0f : 2.0f, Fade(BLACK, 0.6f));
 
     int fontSize = 18;
     int textWidth = MeasureText(text, fontSize);
     float textX = bounds.x + (bounds.width - textWidth) / 2.0f;
     float textY = bounds.y + (bounds.height - fontSize) / 2.0f;
 
+    DrawText(text, (int)textX + 2, (int)textY + 2, fontSize, Fade(BLACK, 0.7f));
     DrawText(text, (int)textX, (int)textY, fontSize, WHITE);
 
     return (isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
 }
 
+/* Enhanced progress bar with gradient */
 void DrawProgressBar(Rectangle bounds, float percentage, Color barColor, Color bgColor, const char *label) {
     if (percentage < 0.0f) percentage = 0.0f;
     if (percentage > 100.0f) percentage = 100.0f;
 
+    DrawRectangle((int)bounds.x + 2, (int)bounds.y + 2, (int)bounds.width, (int)bounds.height, Fade(BLACK, 0.3f));
     DrawRectangleRec(bounds, bgColor);
 
     float filledWidth = bounds.width * (percentage / 100.0f);
-    Rectangle fillArea = { bounds.x, bounds.y, filledWidth, bounds.height };
-    DrawRectangleRec(fillArea, barColor);
+    if (filledWidth > 0) {
+        Rectangle fillArea = { bounds.x, bounds.y, filledWidth, bounds.height };
+        DrawRectangleGradientH((int)fillArea.x, (int)fillArea.y, (int)fillArea.width, (int)fillArea.height, 
+                               Fade(barColor, 0.9f), barColor);
+        Rectangle shineArea = { bounds.x, bounds.y, filledWidth, bounds.height / 3 };
+        DrawRectangleRec(shineArea, Fade(WHITE, 0.2f));
+    }
 
-    DrawRectangleLinesEx(bounds, 1.5f, DARKGRAY);
+    DrawRectangleLinesEx(bounds, 2.0f, Fade(BLACK, 0.6f));
 
     char buffer[64];
     snprintf(buffer, sizeof(buffer), "%s: %.1f%%", label, percentage);
-
     int fontSize = 14;
     int textWidth = MeasureText(buffer, fontSize);
     float textX = bounds.x + (bounds.width - textWidth) / 2.0f;
     float textY = bounds.y + (bounds.height - fontSize) / 2.0f;
 
-    DrawText(buffer, (int)textX + 1, (int)textY + 1, fontSize, BLACK);
+    DrawText(buffer, (int)textX + 2, (int)textY + 2, fontSize, Fade(BLACK, 0.5f));
     DrawText(buffer, (int)textX, (int)textY, fontSize, WHITE);
 }
 
@@ -163,7 +181,7 @@ UIAction UI_DrawMainMenu(GameScreen currentState)
         );
 
         DrawText(
-            "- Reach 90% vaccination and reduce infection below 5%.",
+            "- Reach 90% vaccination and reduce infection below 3%.",
             (int)panel.x + 40,
             (int)panel.y + 275,
             18,
@@ -193,41 +211,39 @@ UIAction UI_DrawMainMenu(GameScreen currentState)
 
     /* MAIN MENU */
 
+    /* Enhanced title with shadow */
     const char *title = "CURE INC.";
-
-    int titleWidth = MeasureText(
-        title,
-        50
-    );
-
-    DrawText(
-        title,
-        (screenWidth - titleWidth) / 2,
-        150,
-        50,
-        DARKBLUE
-    );
+    int titleWidth = MeasureText(title, 60);
+    int titleX = (screenWidth - titleWidth) / 2;
+    
+    DrawText(title, titleX + 4, 124, 60, Fade(BLACK, 0.5f));
+    DrawText(title, titleX + 2, 122, 60, Fade(DARKBLUE, 0.7f));
+    DrawText(title, titleX, 120, 60, BLUE);
+    
+    const char *subtitle = "Save Humanity from the Pandemic";
+    int subWidth = MeasureText(subtitle, 20);
+    DrawText(subtitle, (screenWidth - subWidth) / 2, 190, 20, DARKGRAY);
 
 
     Rectangle playBtn = {
-        (float)(screenWidth - 220) / 2,
-        300,
-        220,
-        50
+        (float)(screenWidth - 240) / 2,
+        280,
+        240,
+        55
     };
 
     Rectangle helpBtn = {
-        (float)(screenWidth - 220) / 2,
-        370,
-        220,
-        50
+        (float)(screenWidth - 240) / 2,
+        355,
+        240,
+        55
     };
 
     Rectangle exitBtn = {
-        (float)(screenWidth - 220) / 2,
-        440,
-        220,
-        50
+        (float)(screenWidth - 240) / 2,
+        430,
+        240,
+        55
     };
 
 
@@ -266,11 +282,12 @@ UIAction UI_DrawMainMenu(GameScreen currentState)
     return UI_NONE;
 }
 
+/* Enhanced gameplay HUD */
 UIAction UI_DrawGameplayHUD(const GameStats *stats) {
     int screenWidth = GetScreenWidth();
 
-    Rectangle headerBar = { 0, 0, (float)screenWidth, 72 };
-    DrawUIPanel(headerBar, LIGHTGRAY, GRAY, 2.0f);
+    DrawRectangleGradientV(0, 0, screenWidth, 72, Fade(SKYBLUE, 0.3f), Fade(LIGHTGRAY, 0.8f));
+    DrawRectangleLinesEx((Rectangle){0, 70, (float)screenWidth, 2}, 2.0f, DARKGRAY);
 
     Rectangle cureBarBounds = { 20, 10, 220, 28 };
     DrawProgressBar(cureBarBounds, stats->cureProgress, BLUE, DARKGRAY, "Cure");
