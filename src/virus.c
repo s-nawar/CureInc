@@ -1,7 +1,7 @@
 #include "virus.h"
 #include <stdlib.h>
 
-/* Game balance values, not medical predictions. */
+/* Game balance values */
 #define MUTATION_MIN_DAYS 20
 #define MUTATION_MAX_DAYS 30
 #define HOSPITAL_BED_SHARE 0.05f
@@ -22,13 +22,13 @@ static float effective_healthcare(const Region *r)
                  0.0f, 1.0f);
 }
 
-/* Set starting virus values. */
+/* Set starting virus values - Balanced for challenging gameplay */
 void virus_init(Virus *v)
 {
     *v = (Virus){0};
 
-    v->infectivity = 0.13f;
-    v->severity = 0.005f;
+    v->infectivity = 0.10f;   /* Reduced from 0.13 so spread is manageable */
+    v->severity = 0.004f;     /* Reduced from 0.005 so deaths are slower */
     v->recoveryRate = 0.030f;
     v->mutationRate = 0.12f;
     v->lastMutation = TRAIT_NONE;
@@ -76,7 +76,7 @@ int virus_try_mutate(Virus *v, int day)
     v->lastMutation = chosen;
     v->lastMutationDay = day;
 
-    /* Every mutation raises spread by 3% and resistance by 5 points. */
+    /* Every mutation raises spread and resistance */
     v->infectivity *= 1.03f;
     v->resistance += 0.05f;
 

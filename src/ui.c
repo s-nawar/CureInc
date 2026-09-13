@@ -6,6 +6,7 @@
 
 static bool gRegionPanelOpen   = false;
 static int  gPausedSpeedBackup = 1;
+static bool gShowHowToPlay = false;
 typedef enum { INFO_TAB_LAB = 0, INFO_TAB_VIRUS, INFO_TAB_RESEARCH } InfoTab;
 static InfoTab gActiveInfoTab = INFO_TAB_LAB;
 
@@ -18,81 +19,298 @@ void UI_ResetGameplayState(void) {
     gPausedSpeedBackup = 1;
 }
 
+/* Enhanced panel with shadow and gradient */
 void DrawUIPanel(Rectangle bounds, Color background, Color border, float borderWidth) {
-    DrawRectangleRec(bounds, background);
+    DrawRectangle((int)bounds.x + 4, (int)bounds.y + 4, (int)bounds.width, (int)bounds.height, Fade(BLACK, 0.3f));
+    DrawRectangleGradientV((int)bounds.x, (int)bounds.y, (int)bounds.width, (int)bounds.height, 
+                           background, Fade(background, 0.85f));
     DrawRectangleLinesEx(bounds, borderWidth, border);
 }
 
+/* Enhanced button with 3D effect and hover animation */
 bool DrawUIButton(Rectangle bounds, const char *text, Color baseColor, Color hoverColor) {
     Vector2 mousePos = GetMousePosition();
     bool isHovered = CheckCollisionPointRec(mousePos, bounds);
     Color activeColor = isHovered ? hoverColor : baseColor;
 
-    DrawRectangleRec(bounds, activeColor);
-    DrawRectangleLinesEx(bounds, 2.0f, DARKGRAY);
+    if (isHovered) {
+        DrawRectangle((int)bounds.x + 3, (int)bounds.y + 3, (int)bounds.width, (int)bounds.height, Fade(BLACK, 0.4f));
+    } else {
+        DrawRectangle((int)bounds.x + 2, (int)bounds.y + 2, (int)bounds.width, (int)bounds.height, Fade(BLACK, 0.3f));
+    }
+
+    DrawRectangleGradientV((int)bounds.x, (int)bounds.y, (int)bounds.width, (int)bounds.height, 
+                           activeColor, Fade(activeColor, 0.7f));
+    DrawRectangleLinesEx(bounds, isHovered ? 3.0f : 2.0f, Fade(BLACK, 0.6f));
 
     int fontSize = 18;
     int textWidth = MeasureText(text, fontSize);
     float textX = bounds.x + (bounds.width - textWidth) / 2.0f;
     float textY = bounds.y + (bounds.height - fontSize) / 2.0f;
 
+    DrawText(text, (int)textX + 2, (int)textY + 2, fontSize, Fade(BLACK, 0.7f));
     DrawText(text, (int)textX, (int)textY, fontSize, WHITE);
 
     return (isHovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
 }
 
+/* Enhanced progress bar with gradient */
 void DrawProgressBar(Rectangle bounds, float percentage, Color barColor, Color bgColor, const char *label) {
     if (percentage < 0.0f) percentage = 0.0f;
     if (percentage > 100.0f) percentage = 100.0f;
 
+    DrawRectangle((int)bounds.x + 2, (int)bounds.y + 2, (int)bounds.width, (int)bounds.height, Fade(BLACK, 0.3f));
     DrawRectangleRec(bounds, bgColor);
 
     float filledWidth = bounds.width * (percentage / 100.0f);
-    Rectangle fillArea = { bounds.x, bounds.y, filledWidth, bounds.height };
-    DrawRectangleRec(fillArea, barColor);
+    if (filledWidth > 0) {
+        Rectangle fillArea = { bounds.x, bounds.y, filledWidth, bounds.height };
+        DrawRectangleGradientH((int)fillArea.x, (int)fillArea.y, (int)fillArea.width, (int)fillArea.height, 
+                               Fade(barColor, 0.9f), barColor);
+        Rectangle shineArea = { bounds.x, bounds.y, filledWidth, bounds.height / 3 };
+        DrawRectangleRec(shineArea, Fade(WHITE, 0.2f));
+    }
 
-    DrawRectangleLinesEx(bounds, 1.5f, DARKGRAY);
+    DrawRectangleLinesEx(bounds, 2.0f, Fade(BLACK, 0.6f));
 
     char buffer[64];
     snprintf(buffer, sizeof(buffer), "%s: %.1f%%", label, percentage);
-
     int fontSize = 14;
     int textWidth = MeasureText(buffer, fontSize);
     float textX = bounds.x + (bounds.width - textWidth) / 2.0f;
     float textY = bounds.y + (bounds.height - fontSize) / 2.0f;
 
-    DrawText(buffer, (int)textX + 1, (int)textY + 1, fontSize, BLACK);
+    DrawText(buffer, (int)textX + 2, (int)textY + 2, fontSize, Fade(BLACK, 0.5f));
     DrawText(buffer, (int)textX, (int)textY, fontSize, WHITE);
 }
 
 // Day 1: screen-level widgets — return intent, never mutate//
-UIAction UI_DrawMainMenu(GameScreen currentState) {
-    (void)currentState; // not used yet — kept for future menu logic
+UIAction UI_DrawMainMenu(GameScreen currentState)
+{
+    (void)currentState;
 
     int screenWidth = GetScreenWidth();
 
-    const char *title = "CURE INC.";
-    int titleWidth = MeasureText(title, 50);
-    DrawText(title, (screenWidth - titleWidth) / 2, 150, 50, DARKBLUE);
+    /* HOW TO PLAY SCREEN */
+    if (gShowHowToPlay)
+    {
+        const char *title = "HOW TO PLAY";
 
-    Rectangle startBtn = { (float)(screenWidth - 200) / 2, 300, 200, 50 };
-    if (DrawUIButton(startBtn, "START GAME", BLUE, SKYBLUE)) {
+        int titleWidth = MeasureText(title, 42);
+
+        DrawText(
+            title,
+            (screenWidth - titleWidth) / 2,
+            100,
+            42,
+            DARKBLUE
+        );
+
+
+        Rectangle panel = {
+            (float)(screenWidth - 700) / 2,
+            180,
+            700,
+            380
+        };
+
+        DrawUIPanel(
+            panel,
+            RAYWHITE,
+            DARKGRAY,
+            2.0f
+        );
+
+
+        DrawText(
+            "GOAL",
+            (int)panel.x + 30,
+            (int)panel.y + 30,
+            24,
+            DARKGREEN
+        );
+
+        DrawText(
+            "Develop and distribute a vaccine before humanity collapses.",
+            (int)panel.x + 30,
+            (int)panel.y + 65,
+            18,
+            BLACK
+        );
+
+
+        DrawText(
+            "HOW TO PLAY",
+            (int)panel.x + 30,
+            (int)panel.y + 115,
+            24,
+            DARKBLUE
+        );
+
+
+        DrawText(
+            "- Hire scientists to increase research speed.",
+            (int)panel.x + 40,
+            (int)panel.y + 155,
+            18,
+            BLACK
+        );
+
+        DrawText(
+            "- Upgrade your laboratory and vaccine production.",
+            (int)panel.x + 40,
+            (int)panel.y + 185,
+            18,
+            BLACK
+        );
+
+        DrawText(
+            "- Monitor infections, deaths and healthcare capacity.",
+            (int)panel.x + 40,
+            (int)panel.y + 215,
+            18,
+            BLACK
+        );
+
+        DrawText(
+            "- React to mutations and random world events.",
+            (int)panel.x + 40,
+            (int)panel.y + 245,
+            18,
+            BLACK
+        );
+
+        DrawText(
+            "- Reach 90% vaccination and reduce infection below 3%.",
+            (int)panel.x + 40,
+            (int)panel.y + 275,
+            18,
+            BLACK
+        );
+
+
+        Rectangle backBtn = {
+            (float)(screenWidth - 200) / 2,
+            600,
+            200,
+            50
+        };
+
+        if (DrawUIButton(
+                backBtn,
+                "BACK",
+                BLUE,
+                SKYBLUE))
+        {
+            gShowHowToPlay = false;
+        }
+
+        return UI_NONE;
+    }
+
+
+    /* MAIN MENU */
+
+    /* Enhanced title with shadow */
+    const char *title = "CURE INC.";
+    int titleWidth = MeasureText(title, 60);
+    int titleX = (screenWidth - titleWidth) / 2;
+    
+    DrawText(title, titleX + 4, 124, 60, Fade(BLACK, 0.5f));
+    DrawText(title, titleX + 2, 122, 60, Fade(DARKBLUE, 0.7f));
+    DrawText(title, titleX, 120, 60, BLUE);
+    
+    const char *subtitle = "Save Humanity from the Pandemic";
+    int subWidth = MeasureText(subtitle, 20);
+    DrawText(subtitle, (screenWidth - subWidth) / 2, 190, 20, DARKGRAY);
+
+
+    Rectangle playBtn = {
+        (float)(screenWidth - 240) / 2,
+        280,
+        240,
+        55
+    };
+
+    Rectangle helpBtn = {
+        (float)(screenWidth - 240) / 2,
+        355,
+        240,
+        55
+    };
+
+    Rectangle exitBtn = {
+        (float)(screenWidth - 240) / 2,
+        430,
+        240,
+        55
+    };
+
+
+    if (DrawUIButton(
+            playBtn,
+            "PLAY",
+            DARKGREEN,
+            GREEN))
+    {
         return UI_START_GAME;
     }
+
+
+    if (DrawUIButton(
+            helpBtn,
+            "HOW TO PLAY",
+            BLUE,
+            SKYBLUE))
+    {
+        gShowHowToPlay = true;
+
+        return UI_NONE;
+    }
+
+
+    if (DrawUIButton(
+            exitBtn,
+            "EXIT",
+            MAROON,
+            RED))
+    {
+        return UI_EXIT;
+    }
+
 
     return UI_NONE;
 }
 
+/* Enhanced gameplay HUD */
 UIAction UI_DrawGameplayHUD(const GameStats *stats) {
     int screenWidth = GetScreenWidth();
 
-    Rectangle headerBar = { 0, 0, (float)screenWidth, 60 };
-    DrawUIPanel(headerBar, LIGHTGRAY, GRAY, 2.0f);
+    DrawRectangleGradientV(0, 0, screenWidth, 72, Fade(SKYBLUE, 0.3f), Fade(LIGHTGRAY, 0.8f));
+    DrawRectangleLinesEx((Rectangle){0, 70, (float)screenWidth, 2}, 2.0f, DARKGRAY);
 
-    Rectangle cureBarBounds = { 20, 15, 220, 30 };
+    Rectangle cureBarBounds = { 20, 10, 220, 28 };
     DrawProgressBar(cureBarBounds, stats->cureProgress, BLUE, DARKGRAY, "Cure");
+    
+    /* Draw cure stage indicator below the progress bar */
+    static const char *phaseNames[] = { "Discovery", "Trials", "Production", "Distribution" };
+    const char *currentPhase = phaseNames[stats->curePhase];
+    Color phaseColors[] = { DARKBLUE, BLUE, SKYBLUE, DARKGREEN };
+    Color phaseColor = phaseColors[stats->curePhase];
+    
+    /* Draw small badge with current phase */
+    Rectangle phaseBadge = { 20, 42, 220, 18 };
+    DrawRectangleRec(phaseBadge, Fade(phaseColor, 0.3f));
+    DrawRectangleLinesEx(phaseBadge, 1.0f, phaseColor);
+    
+    int phaseTextSize = 11;
+    char phaseText[32];
+    snprintf(phaseText, sizeof(phaseText), "Phase: %s", currentPhase);
+    int phaseTextWidth = MeasureText(phaseText, phaseTextSize);
+    DrawText(phaseText, (int)(phaseBadge.x + (phaseBadge.width - phaseTextWidth) / 2), 
+             (int)phaseBadge.y + 3, phaseTextSize, phaseColor);
 
-    Rectangle infectBarBounds = { 260, 15, 220, 30 };
+    Rectangle infectBarBounds = { 260, 10, 220, 28 };
     DrawProgressBar(infectBarBounds, stats->globalInfection, RED, DARKGRAY, "Infected");
 
     char budgetText[32];
@@ -197,7 +415,7 @@ void UI_DrawRegionPanel(Rectangle bounds, RegionData *region, GameStats *stats, 
     DrawText(borderStatus, (int)bounds.x + 15, (int)bounds.y + 190, 16, statusColor);
 
     Rectangle fundBtn = { bounds.x + 15, bounds.y + 230, bounds.width - 30, 35 };
-    if (DrawUIButton(fundBtn, "Fund Research ($100)", DARKGREEN, GREEN)) {
+    if (DrawUIButton(fundBtn, "Fund Local Research ($100)", DARKGREEN, GREEN)) {
         if (cure->funding >= 100) {
             cure->funding -= 100;
             region->cureResearch += 15.0f;
@@ -276,7 +494,19 @@ void UI_DrawGameplay(GameState *gs, Rectangle regionNode) {
     }
 
     GameStats stats = {0};
-    stats.cureProgress    = gs->cure.researchProgress;
+    /* Calculate overall cure progress across all phases (0-100%) */
+    float overallProgress = 0.0f;
+    if (gs->cure.phase == PHASE_DISCOVERY) {
+        overallProgress = gs->cure.researchProgress * 0.25f; /* 0-25% */
+    } else if (gs->cure.phase == PHASE_TRIALS) {
+        overallProgress = 25.0f + (gs->cure.researchProgress * 0.25f); /* 25-50% */
+    } else if (gs->cure.phase == PHASE_PRODUCTION) {
+        overallProgress = 50.0f + (gs->cure.researchProgress * 0.25f); /* 50-75% */
+    } else if (gs->cure.phase == PHASE_DISTRIBUTION) {
+        overallProgress = 75.0f + (gs->cure.globalDistributed * 25.0f); /* 75-100% */
+    }
+    
+    stats.cureProgress    = overallProgress;
     stats.globalInfection = gs->virus.globalInfected * 100.0f;
     stats.budget          = (int)gs->cure.funding;
     stats.dayCount        = gs->day;
@@ -284,6 +514,7 @@ void UI_DrawGameplay(GameState *gs, Rectangle regionNode) {
     stats.fundingRate     = gs->cure.fundingPerTick;
     stats.researchRate    = gs->cure.rpPerTick;
     stats.stability       = gs->cure.stability;
+    stats.curePhase       = gs->cure.phase;
 
     UIAction hudAction = UI_DrawGameplayHUD(&stats);
     if (hudAction == UI_SPEED_1)      { gs->gameSpeed = 1; gPausedSpeedBackup = 1; }
@@ -317,20 +548,201 @@ void UI_DrawGameplay(GameState *gs, Rectangle regionNode) {
     }
 }
 
-UIAction UI_DrawEndScreen(GameScreen screen) {
-    bool won = (screen == SCREEN_WIN);
+UIAction UI_DrawEndScreen(const GameState *gs)
+{
+    bool won = (gs->screen == SCREEN_WIN);
 
-    const char *message  = won ? "CURE DISTRIBUTED" : "HUMANITY HAS FALLEN";
-    Color       msgColor = won ? DARKGREEN : RED;
-    int         fontSize = won ? 34 : 40;
+    const char *title =
+        won ? "VICTORY" : "DEFEAT";
 
-    int textWidth = MeasureText(message, fontSize);
-    DrawText(message, (SCREEN_WIDTH - textWidth) / 2, 320, fontSize, msgColor);
+    const char *subtitle =
+        won ?
+        "Humanity has contained the outbreak." :
+        "Humanity could not contain the outbreak.";
 
-    Rectangle menuBtn = { (float)(SCREEN_WIDTH - 200) / 2, 420, 200, 50 };
-    if (DrawUIButton(menuBtn, "MAIN MENU", BLUE, SKYBLUE)) {
+    Color titleColor =
+        won ? DARKGREEN : RED;
+
+
+    int titleSize = 48;
+
+    int titleWidth =
+        MeasureText(title, titleSize);
+
+    DrawText(
+        title,
+        (SCREEN_WIDTH - titleWidth) / 2,
+        100,
+        titleSize,
+        titleColor
+    );
+
+
+    int subtitleWidth =
+        MeasureText(subtitle, 22);
+
+    DrawText(
+        subtitle,
+        (SCREEN_WIDTH - subtitleWidth) / 2,
+        165,
+        22,
+        DARKGRAY
+    );
+
+
+    Rectangle panel = {
+        (float)(SCREEN_WIDTH - 600) / 2,
+        220,
+        600,
+        340
+    };
+
+    DrawUIPanel(
+        panel,
+        RAYWHITE,
+        DARKGRAY,
+        2.0f
+    );
+
+
+    char buffer[128];
+
+    int x = (int)panel.x + 50;
+    int y = (int)panel.y + 35;
+
+
+    snprintf(
+        buffer,
+        sizeof(buffer),
+        "Days Survived: %d",
+        gs->day
+    );
+
+    DrawText(
+        buffer,
+        x,
+        y,
+        22,
+        BLACK
+    );
+
+    y += 45;
+
+
+    snprintf(
+        buffer,
+        sizeof(buffer),
+        "Total Deaths: %.1f%%",
+        gs->virus.globalDead * 100.0f
+    );
+
+    DrawText(
+        buffer,
+        x,
+        y,
+        22,
+        RED
+    );
+
+    y += 45;
+
+
+    snprintf(
+        buffer,
+        sizeof(buffer),
+        "Global Vaccinated: %.1f%%",
+        gs->cure.globalDistributed * 100.0f
+    );
+
+    DrawText(
+        buffer,
+        x,
+        y,
+        22,
+        DARKGREEN
+    );
+
+    y += 45;
+
+
+    snprintf(
+        buffer,
+        sizeof(buffer),
+        "Final Infection: %.1f%%",
+        gs->virus.globalInfected * 100.0f
+    );
+
+    DrawText(
+        buffer,
+        x,
+        y,
+        22,
+        MAROON
+    );
+
+    y += 45;
+
+
+    if (gs->cure.completionDay > 0)
+    {
+        snprintf(
+            buffer,
+            sizeof(buffer),
+            "Cure Completed: Day %d",
+            gs->cure.completionDay
+        );
+    }
+    else
+    {
+        snprintf(
+            buffer,
+            sizeof(buffer),
+            "Cure Completed: No"
+        );
+    }
+
+    DrawText(
+        buffer,
+        x,
+        y,
+        22,
+        DARKBLUE
+    );
+
+
+    /* Reason for victory/defeat */
+
+    if (gs->endReason != NULL)
+    {
+        int reasonWidth =
+            MeasureText(gs->endReason, 16);
+
+        DrawText(
+            gs->endReason,
+            (SCREEN_WIDTH - reasonWidth) / 2,
+            (int)panel.y + 285,
+            16,
+            DARKGRAY
+        );
+    }
+
+
+    Rectangle menuBtn = {
+        (float)(SCREEN_WIDTH - 220) / 2,
+        600,
+        220,
+        50
+    };
+
+    if (DrawUIButton(
+            menuBtn,
+            "MAIN MENU",
+            BLUE,
+            SKYBLUE))
+    {
         return UI_MAIN_MENU;
     }
+
 
     return UI_NONE;
 }
@@ -372,8 +784,8 @@ static UIAction DrawLabBody(Rectangle area, const CureState *c) {
         action = UI_UPGRADE_LAB;
     
     const char *prodBtnText = (c->productionLevel >= 3) ? "Production Maxed" :
-        (c->productionLevel == 2) ? "Upgrade Prod ($600)" :
-        (c->productionLevel == 1) ? "Upgrade Prod ($400)" : "Upgrade Prod ($200)";
+        (c->productionLevel == 2) ? "Upgrade Production ($600)" :
+        (c->productionLevel == 1) ? "Upgrade Production ($400)" : "Upgrade Production ($200)";
     if (DrawUIButton(prodBtn, prodBtnText, DARKBLUE, SKYBLUE)) 
         action = UI_INCREASE_PRODUCTION;
 
